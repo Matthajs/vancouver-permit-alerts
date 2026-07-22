@@ -1,0 +1,39 @@
+name: Weekly Permit Alerts
+
+on:
+  schedule:
+    - cron: "0 15 * * 1" # Mondays 15:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no DB writes; preview to TEST_EMAIL)"
+        type: boolean
+        default: false
+      enrich:
+        description: "Run AI enrichment"
+        type: boolean
+        default: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Run permit alerts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_FROM_EMAIL: ${{ secrets.ALERT_FROM_EMAIL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          ENRICH: ${{ github.event_name == 'workflow_dispatch' && inputs.enrich || 'true' }}
+        run: npm start
