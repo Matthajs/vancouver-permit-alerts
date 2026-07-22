@@ -22,6 +22,13 @@ other municipalities).
   silently.
 - **Supabase: new project**, created and configured via the Supabase MCP.
 - **Initial recipient:** `mweggemans@cressey.com` (seeded active).
+- **AI enrichment (new).** Each new permit is researched and summarized by
+  Claude Sonnet 5 with the server-side web search tool, producing a
+  newsletter-style write-up aimed at a real estate developer (what the
+  project is — tower / community centre / etc. — location, construction
+  value, developer/applicant, and any renderings or article links Claude
+  finds). The email leads with these summaries, followed by the full
+  technical data table.
 
 ## Data source
 
@@ -67,9 +74,15 @@ Query (URL-encode properly):
      `permit_number` + `source`); filter those out.
    - If nothing new across all sources: log to console and exit silently, send
      no email.
-   - If new permits: render an inline-CSS HTML email with a table (one row per
-     permit, all non-geometry fields as columns; `projectvalue` formatted as
-     `$XX,XXX,XXX CAD`; dates formatted as `YYYY-MM-DD`).
+   - **Enrich** each new permit via `enrichPermits()` (Claude Sonnet 5 + web
+     search) → a per-permit newsletter HTML block. Enrichment runs with
+     limited concurrency; a per-permit failure (or a missing
+     `ANTHROPIC_API_KEY`) falls back to a basic block built from the permit
+     fields, so the email still sends.
+   - If new permits: render an inline-CSS HTML email with (a) the newsletter
+     section — one summary block per permit — followed by (b) a table (one row
+     per permit, all non-geometry fields as columns; `projectvalue` formatted
+     as `$XX,XXX,XXX CAD`; dates formatted as `YYYY-MM-DD`).
    - Send via Gmail SMTP as **individual sends** — one message per active
      recipient in `alert_recipients` where `active=true`. This isolates
      per-recipient failures and keeps recipients from seeing each other.
@@ -81,9 +94,10 @@ Query (URL-encode properly):
 - `lib/types.ts` — `PermitRecord` normalized shape + `PermitSource` type.
 - `lib/sources/cov-building-permits.ts` — `fetchCovBuildingPermits(days: number): Promise<PermitRecord[]>`.
 - `lib/sources/index.ts` — `SOURCES` array of source descriptors/functions.
+- `lib/enrich.ts` — Anthropic client + `enrichPermits(records): Promise<EnrichedPermit[]>` (Sonnet 5, adaptive thinking, `web_search_20260209`).
 - `lib/email.ts` — Nodemailer Gmail transport, `renderPermitEmail()`, `sendEmail()`.
 - `lib/supabase.ts` — service-role Supabase client.
-- `app/api/cron/permit-alerts/route.ts` — orchestrator route handler.
+- `app/api/cron/permit-alerts/route.ts` — orchestrator route handler (`export const maxDuration` set generously for web-search enrichment).
 - `vercel.json` — cron entry.
 
 ## Normalized type (extensibility)
@@ -104,6 +118,31 @@ later = one new file in `lib/sources/` + one entry in the `SOURCES` array.
 
 The email renderer iterates `raw` (minus geometry keys) for table columns;
 the typed fields drive dedup and the `notified_permits` insert.
+
+## AI enrichment
+
+`lib/enrich.ts` exports `enrichPermits(records: PermitRecord[]): Promise<EnrichedPermit[]>`
+where `EnrichedPermit = PermitRecord & { summaryHtml: string }`.
+
+- SDK: `@anthropic-ai/sdk`. Model: `claude-sonnet-5` (chosen over Opus to
+  save credits — ample for weekly summarization). Adaptive thinking
+  (`thinking: { type: "adaptive" }`). Server-side web search tool
+  (`web_search_20260209`) so Claude can research each project.
+- One streamed API call per permit (streaming avoids HTTP timeouts on
+  web-search + thinking); collect via `.finalMessage()`. Concurrency is
+  capped (e.g. 3 at a time) to stay within rate limits and function time.
+- Prompt: system role = a newsletter writer briefing a Vancouver real estate
+  developer; user message = the permit's fields. Claude is instructed to
+  search the web for the project (name, developer, what's being built,
+  renderings/coverage) and return a self-contained inline-CSS HTML block
+  following a fixed template (headline, 2–3 sentence summary, key-facts list,
+  any links found). Links are only included when Claude actually finds them —
+  no fabricated URLs.
+- Graceful degradation: on any per-permit API error, or when
+  `ANTHROPIC_API_KEY` is unset, `summaryHtml` falls back to a basic block
+  rendered from the permit fields. The email always sends.
+- The route sets `export const maxDuration` high enough for sequential/limited-
+  concurrency enrichment of a weekly batch (typically 0–5 permits).
 
 ## Supabase schema
 
@@ -137,8 +176,10 @@ Seed: `insert into alert_recipients (email, name) values ('mweggemans@cressey.co
   `GMAIL_USER` + `GMAIL_APP_PASSWORD`.
 - From: `"Matthijs Weggemans" <mfweggemans@gmail.com>` (via `ALERT_FROM_EMAIL`).
 - Subject: `Vancouver Permits $20M+ — Week of {date}: {N} new permit(s)`
-- Body: short intro line, then the table, then a footer linking to the
-  dataset page: https://opendata.vancouver.ca/explore/dataset/issued-building-permits/
+- Body: short intro line, then the **newsletter section** (one AI summary
+  block per permit, from `enrichPermits`), then the **technical table**, then
+  a footer linking to the dataset page:
+  https://opendata.vancouver.ca/explore/dataset/issued-building-permits/
 - Table styled with inline CSS (email clients often ignore `<style>`).
   Horizontal scroll acceptable; key fields (value, address, applicant,
   description) emphasized.
@@ -148,6 +189,7 @@ Seed: `insert into alert_recipients (email, name) values ('mweggemans@cressey.co
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 - `GMAIL_USER` (mfweggemans@gmail.com), `GMAIL_APP_PASSWORD`
 - `ALERT_FROM_EMAIL` (`"Matthijs Weggemans" <mfweggemans@gmail.com>`)
+- `ANTHROPIC_API_KEY` (AI enrichment; enrichment degrades gracefully if unset)
 - `CRON_SECRET`
 - `TEST_EMAIL` (dryRun target)
 
@@ -158,6 +200,9 @@ Seed: `insert into alert_recipients (email, name) values ('mweggemans@cressey.co
   Does NOT write to `notified_permits`.
 - Auth for dryRun: `?secret=<CRON_SECRET>` accepted in addition to the Bearer
   header.
+- dryRun enriches by default (so the preview matches a real send); pass
+  `?enrich=false` to skip the Anthropic calls for fast, cheap iteration on
+  layout.
 
 ## Do NOT
 
