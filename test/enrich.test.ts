@@ -26,4 +26,26 @@ describe("enrich pure helpers", () => {
     ];
     expect(extractHtml(content)).toBe("<div>Hello</div>");
   });
+
+  it("fallbackSummaryHtml escapes HTML metacharacters from raw fields", () => {
+    const malicious: PermitRecord = {
+      source: "cov-issued-building-permits",
+      permitNumber: "BP-2026-002",
+      projectValue: 30000000,
+      issueDate: "2026-07-20",
+      address: "600 Granville St",
+      raw: {
+        projectdescription: 'Tower <script>x</script> & "quotes"',
+        applicant: 'Acme <img src=x onerror=alert(1)> & Co',
+        typeofwork: 'New <b>Build</b>',
+      },
+    };
+    const html = fallbackSummaryHtml(malicious);
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("&amp;");
+    expect(html).toContain("&quot;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img src=x onerror=alert(1)>");
+    expect(html).not.toContain("<b>Build</b>");
+  });
 });

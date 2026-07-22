@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { PermitRecord, EnrichedPermit } from "./types";
-import { formatCad } from "./email";
+import { formatCad, escapeHtml } from "./email";
 
 const MODEL = "claude-sonnet-5";
 const CONCURRENCY = 3;
@@ -10,13 +10,13 @@ export function fallbackSummaryHtml(r: PermitRecord): string {
   const applicant = r.raw["applicant"];
   const type = r.raw["typeofwork"];
   const parts: string[] = [];
-  if (desc) parts.push(`<p style="margin:4px 0;">${String(desc)}</p>`);
+  if (desc) parts.push(`<p style="margin:4px 0;">${escapeHtml(desc)}</p>`);
   const facts: string[] = [`Value: ${formatCad(r.projectValue)}`];
-  if (r.address) facts.push(`Address: ${r.address}`);
-  if (applicant) facts.push(`Applicant: ${String(applicant)}`);
-  if (type) facts.push(`Type: ${String(type)}`);
+  if (r.address) facts.push(`Address: ${escapeHtml(r.address)}`);
+  if (applicant) facts.push(`Applicant: ${escapeHtml(applicant)}`);
+  if (type) facts.push(`Type: ${escapeHtml(type)}`);
   return `<div style="border:1px solid #eee;border-left:4px solid #b5651d;padding:12px;margin:12px 0;">
-    <h3 style="margin:0 0 6px;font-family:Georgia,serif;">${r.address ?? r.permitNumber}</h3>
+    <h3 style="margin:0 0 6px;font-family:Georgia,serif;">${escapeHtml(r.address ?? r.permitNumber)}</h3>
     ${parts.join("")}
     <ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:#444;">
       ${facts.map((f) => `<li>${f}</li>`).join("")}

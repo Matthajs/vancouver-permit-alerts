@@ -62,6 +62,9 @@ async function main(): Promise<void> {
     console.log("No active recipients; skipping send. Not recording as notified.");
     return;
   }
+  // All-or-nothing: if any recipient send throws, main() rejects before
+  // recordNotified runs, so nothing is recorded and the whole batch is
+  // retried next run (recipients who already received this send may get a duplicate).
   for (const r of recipients) {
     await sendEmail({ to: r.email, subject, html });
     console.log(`Sent to ${r.email}`);

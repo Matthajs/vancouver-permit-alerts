@@ -21,7 +21,7 @@ export function formatDate(iso: string): string {
   return (iso || "").slice(0, 10);
 }
 
-function escapeHtml(v: unknown): string {
+export function escapeHtml(v: unknown): string {
   return String(v ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
