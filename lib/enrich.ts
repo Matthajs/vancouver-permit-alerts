@@ -32,18 +32,31 @@ export function extractHtml(content: Array<{ type: string; text?: string }>): st
     .trim();
   // Strip a ```html ... ``` or ``` ... ``` code fence if present.
   const fence = text.match(/^```(?:html)?\s*([\s\S]*?)\s*```$/);
-  return (fence ? fence[1] : text).trim();
+  const body = (fence ? fence[1] : text).trim();
+  // Keep only the HTML block: slice from the first <div to the last </div>,
+  // discarding any prose the model wrote around it (e.g. narration about how
+  // many web searches it ran). Falls back to the whole body if no <div> found.
+  const start = body.indexOf("<div");
+  const end = body.lastIndexOf("</div>");
+  if (start !== -1 && end !== -1 && end > start) {
+    return body.slice(start, end + "</div>".length).trim();
+  }
+  return body;
 }
 
 function systemPrompt(): string {
   return [
     "You are a newsletter writer briefing a Vancouver commercial real estate developer.",
     "You are given one newly issued City of Vancouver building permit (value >= $20M).",
-    "Use the web_search tool to research the project: its name, the developer, what is",
-    "being built (e.g. residential tower, office, community centre, mixed-use), and any",
-    "renderings or news coverage. Then write a short newsletter blurb.",
+    "Run a few (AT MOST 3) focused web_search queries to identify the project: its name,",
+    "the developer, what is being built (e.g. residential tower, office, community centre,",
+    "mixed-use), and any renderings or news coverage. If you cannot find details, just",
+    "summarize from the permit fields provided — do NOT keep searching.",
     "",
-    "Output ONLY a self-contained HTML block (no markdown, no code fences) exactly like:",
+    "Output ONLY the single self-contained HTML block below — no preamble, no explanation,",
+    "no markdown, no code fences. NEVER mention your research, the web_search tool, how many",
+    "searches you ran, or any tool/search limits anywhere in the output. The block must be",
+    "exactly like:",
     '<div style="border:1px solid #eee;border-left:4px solid #b5651d;padding:12px;margin:12px 0;">',
     '  <h3 style="margin:0 0 6px;font-family:Georgia,serif;">HEADLINE</h3>',
     '  <p style="margin:4px 0;">2-3 sentence summary of what is happening and why it matters.</p>',
@@ -76,7 +89,7 @@ async function enrichOne(client: Anthropic, r: PermitRecord): Promise<string> {
       max_tokens: 8000,
       thinking: { type: "adaptive" },
       system: systemPrompt(),
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }],
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }],
       messages: [{ role: "user", content: userPrompt(r) }],
     } as any);
     const msg = await stream.finalMessage();
