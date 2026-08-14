@@ -6,6 +6,7 @@ import {
   filterNewPermits,
   recordNotified,
   getActiveRecipients,
+  getHistoricalStats,
 } from "../lib/supabase";
 import { enrichPermits } from "../lib/enrich";
 import { renderPermitEmail, sendEmail } from "../lib/email";
@@ -42,7 +43,8 @@ async function main(): Promise<void> {
   const enriched = await enrichPermits(fresh);
 
   // 4. Render.
-  const { subject, html } = renderPermitEmail(enriched, weekOf);
+  const stats = await getHistoricalStats(new Date());
+  const { subject, html } = renderPermitEmail(enriched, weekOf, stats);
 
   // 5. Send.
   if (dryRun) {
