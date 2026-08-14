@@ -7,7 +7,8 @@ on a free GitHub Actions cron.
 ## How it works
 `src/run.ts` → fetch (`lib/sources`) → dedup (Supabase `notified_permits`) →
 enrich (`lib/enrich`, Sonnet 5 + web search) → render + send (`lib/email`,
-Gmail SMTP) → record sent permits. See `docs/superpowers/specs/` for the design.
+Gmail SMTP, includes a rolling 30/90/365-day stats table) → record sent
+permits. See `docs/superpowers/specs/` for the design.
 
 ## Setup
 
@@ -46,10 +47,13 @@ For local runs, copy `.env.example` to `.env` and fill the same values.
 - CI: automatic Mondays 15:00 UTC; or **Actions → Weekly Permit Alerts → Run
   workflow** with the `dry_run` / `enrich` toggles.
 
-## ⚠️ Keepalive
-GitHub disables scheduled workflows after **60 days of no repo activity**. Push
-a commit occasionally, or the weekly email will silently stop until you
-re-enable the workflow in the Actions tab.
+## Keep-alive
+`.github/workflows/keepalive.yml` runs every 3 days: it pings Supabase (a
+trivial read) so the free-tier project doesn't auto-pause after 7 days of
+inactivity, and commits a timestamp to `keepalive/last-ping.txt`, which also
+resets GitHub's 60-day scheduled-workflow dormancy clock. No action needed
+unless both this workflow and `permit-alerts.yml` stop running — check the
+Actions tab in that case.
 
 ## Extending with new sources
 Add `lib/sources/<name>.ts` exporting a `PermitSource` (normalize into
