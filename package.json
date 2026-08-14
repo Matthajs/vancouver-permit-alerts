@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/run.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "keepalive": "tsx src/keepalive.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
