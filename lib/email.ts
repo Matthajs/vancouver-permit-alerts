@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import type { EnrichedPermit } from "./types";
+import type { EnrichedPermit, HistoricalStats } from "./types";
 
 const DATASET_URL =
   "https://opendata.vancouver.ca/explore/dataset/issued-building-permits/";
@@ -48,6 +48,7 @@ function cell(key: string, value: unknown): string {
 export function renderPermitEmail(
   permits: EnrichedPermit[],
   weekOf: string,
+  stats: HistoricalStats[],
 ): { subject: string; html: string } {
   const n = permits.length;
   const subject = `Vancouver Permits $20M+ — Week of ${weekOf}: ${n} new permit${n === 1 ? "" : "s"}`;
@@ -68,6 +69,19 @@ export function renderPermitEmail(
     )
     .join("");
 
+  const statsThead =
+    '<tr><th style="text-align:left;border:1px solid #ddd;padding:6px;background:#f4f1ea;">Period</th>' +
+    '<th style="text-align:left;border:1px solid #ddd;padding:6px;background:#f4f1ea;">Permits</th>' +
+    '<th style="text-align:left;border:1px solid #ddd;padding:6px;background:#f4f1ea;">Total value</th></tr>';
+  const statsRows = stats
+    .map(
+      (s) =>
+        `<tr><td style="border:1px solid #ddd;padding:6px;">${escapeHtml(s.label)}</td>` +
+        `<td style="border:1px solid #ddd;padding:6px;">${s.count}</td>` +
+        `<td style="border:1px solid #ddd;padding:6px;">${formatCad(s.totalValue)}</td></tr>`,
+    )
+    .join("");
+
   const html = `<div style="font-family:Georgia,serif;color:#222;max-width:100%;">
   <p>${n} new City of Vancouver building permit${n === 1 ? "" : "s"} of $20M+ issued in the last 7 days (week of ${escapeHtml(weekOf)}).</p>
   <h2 style="font-family:Georgia,serif;">This week's projects</h2>
@@ -79,6 +93,11 @@ export function renderPermitEmail(
       <tbody>${rows}</tbody>
     </table>
   </div>
+  <h2 style="font-family:Georgia,serif;">Historical stats ($20M+ permits)</h2>
+  <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;">
+    <thead>${statsThead}</thead>
+    <tbody>${statsRows}</tbody>
+  </table>
   <p style="font-size:12px;color:#666;margin-top:16px;">Source: <a href="${DATASET_URL}">City of Vancouver — Issued Building Permits</a></p>
 </div>`;
 

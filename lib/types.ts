@@ -14,3 +14,10 @@ export interface PermitSource {
   label: string;
   fetch: (days: number) => Promise<PermitRecord[]>;
 }
+
+export interface HistoricalStats {
+  label: string;
+  days: number;
+  count: number;
+  totalValue: number;
+}

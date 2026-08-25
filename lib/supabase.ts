@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { PermitRecord } from "./types";
+import type { PermitRecord, HistoricalStats } from "./types";
 
 let client: SupabaseClient | null = null;
 
@@ -51,4 +51,41 @@ export async function getActiveRecipients(): Promise<{ email: string; name: stri
     .eq("active", true);
   if (error) throw new Error(`Supabase recipients failed: ${error.message}`);
   return (data ?? []) as { email: string; name: string | null }[];
+}
+
+export interface HistoricalStatRow {
+  issue_date: string;
+  project_value: number;
+}
+
+const STATS_WINDOWS: { label: string; days: number }[] = [
+  { label: "Past 30 days", days: 30 },
+  { label: "Past quarter", days: 90 },
+  { label: "Past year", days: 365 },
+];
+
+export function bucketHistoricalStats(
+  rows: HistoricalStatRow[],
+  asOf: Date,
+): HistoricalStats[] {
+  return STATS_WINDOWS.map(({ label, days }) => {
+    const cutoffIso = new Date(asOf.getTime() - days * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const inWindow = rows.filter((r) => r.issue_date >= cutoffIso);
+    return {
+      label,
+      days,
+      count: inWindow.length,
+      totalValue: inWindow.reduce((sum, r) => sum + r.project_value, 0),
+    };
+  });
+}
+
+export async function getHistoricalStats(asOf: Date): Promise<HistoricalStats[]> {
+  const { data, error } = await getSupabase()
+    .from("notified_permits")
+    .select("issue_date, project_value");
+  if (error) throw new Error(`Supabase stats select failed: ${error.message}`);
+  return bucketHistoricalStats((data ?? []) as HistoricalStatRow[], asOf);
 }
